@@ -4,6 +4,12 @@
 -- the session whose email is Paul's. Watermarks and triage marks are keyed
 -- to the signed-in user's email.
 
+
+-- The private layer is keyed to Paul's actual sign-in email.
+create or replace function is_paul() returns boolean as $$
+  select coalesce(auth.jwt() ->> 'email', '') = 'paul@cs-integrated.com';
+$$ language sql stable;
+
 -- ── drop the alpha-era anon policies ─────────────────────────────────
 drop policy if exists org_read          on organizations;
 drop policy if exists runs_read         on runs;
@@ -70,4 +76,4 @@ grant select on needs_you to authenticated;
 grant select on waiting_board to authenticated;
 
 -- ── migrate existing single-user watermarks to the email key ─────────
-update read_watermarks set user_id = 'paul@tbcsi.net' where user_id = 'paul';
+update read_watermarks set user_id = 'paul@cs-integrated.com' where user_id = 'paul';

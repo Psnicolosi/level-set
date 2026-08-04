@@ -18,7 +18,7 @@ export const useSession = () => useContext(SessionContext);
 
 /** Signed-in user's email — the key for watermarks and triage-mark provenance. */
 export async function currentUserEmail(): Promise<string> {
-  if (AUTH_DISABLED) return "paul@tbcsi.net";
+  if (AUTH_DISABLED) return "paul@cs-integrated.com";
   const { data } = await supabase.auth.getSession();
   return data.session?.user.email ?? "";
 }
