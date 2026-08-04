@@ -36,10 +36,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-paper text-ink">
         <Providers>
-          <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col">
-            <main className="flex flex-1 flex-col px-[18px] pt-[14px] pb-[8px]">
-              {children}
-            </main>
+          <div className="flex min-h-dvh flex-col">
+            <main className="flex flex-1 flex-col">{children}</main>
             <TabBar />
           </div>
         </Providers>
