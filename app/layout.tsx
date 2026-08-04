@@ -13,6 +13,16 @@ export const metadata: Metadata = {
   title: "Level Set",
   description:
     "Executive decision surface — what has happened since you last looked, and what needs you.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Level Set",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
