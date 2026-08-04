@@ -7,6 +7,7 @@ import type { FactSource, PassItem, RunSource } from "@/lib/types";
 import ProvenanceSheet from "@/components/ProvenanceSheet";
 import PassFlow from "./PassFlow";
 import NeedsYou from "./NeedsYou";
+import { AUTH_DISABLED, signOut, useSession } from "@/lib/auth";
 
 type Mode = "home" | "pass";
 
@@ -237,7 +238,23 @@ function HomeSurface({
         </div>
       )}
 
+      <SessionLine />
+
       {sheet}
+    </div>
+  );
+}
+
+// Discreet session footer — the only sign-out affordance in the alpha.
+function SessionLine() {
+  const session = useSession();
+  if (AUTH_DISABLED || !session) return null;
+  return (
+    <div className="flex justify-end gap-[8px] pb-[2px] font-mono text-[10px] text-ink-faint">
+      <span>{session.user.email}</span>
+      <button onClick={() => signOut()} className="text-ink-muted underline-offset-2 hover:underline">
+        SIGN OUT
+      </button>
     </div>
   );
 }
