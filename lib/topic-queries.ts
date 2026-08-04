@@ -2,11 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
+import { currentUserEmail } from "./auth";
 import type { ConflictGroup, Fact, OwedItem, Topic } from "./types";
-
-// Single-user alpha: the reader is Paul. Becomes the authenticated user id
-// when Supabase Auth lands (pre-live-data gate).
-const READER = "paul";
 
 export interface TopicData {
   topic: Topic;
@@ -21,6 +18,7 @@ export function useTopicData(topicId: string) {
   return useQuery({
     queryKey: ["topic", topicId],
     queryFn: async (): Promise<TopicData> => {
+      const reader = await currentUserEmail();
       const [topicQ, factsQ, conflictsQ, itemsQ, wmQ] = await Promise.all([
         supabase.from("topics").select("*").eq("id", topicId).single(),
         supabase
@@ -37,7 +35,7 @@ export function useTopicData(topicId: string) {
         supabase
           .from("read_watermarks")
           .select("read_to")
-          .eq("user_id", READER)
+          .eq("user_id", reader)
           .eq("topic_id", topicId)
           .maybeSingle(),
       ]);
@@ -67,10 +65,11 @@ export function useAdvanceWatermark(topicId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
+      const reader = await currentUserEmail();
       const { error } = await supabase
         .from("read_watermarks")
         .upsert(
-          { user_id: READER, topic_id: topicId, read_to: new Date().toISOString() },
+          { user_id: reader, topic_id: topicId, read_to: new Date().toISOString() },
           { onConflict: "user_id,topic_id" },
         );
       if (error) throw error;

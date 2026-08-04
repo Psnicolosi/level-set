@@ -197,6 +197,8 @@ const MARK_BODY: Record<Mark, (d: string) => string> = {
 
 async function markItem(item: PassItem, mark: Mark) {
   const now = new Date().toISOString();
+  const { currentUserEmail } = await import("./auth");
+  const actor = (await currentUserEmail()) || "unknown";
   const update =
     mark === "done"
       ? { state: "done" as const }
@@ -217,7 +219,7 @@ async function markItem(item: PassItem, mark: Mark) {
     body: MARK_BODY[mark](item.description),
     kind: "action",
     verification: "verified",
-    sources: [{ type: "manual", sender: "Paul Nicolosi", timestamp: now, subject: "Triage mark" }],
+    sources: [{ type: "manual", sender: actor, timestamp: now, subject: "Triage mark" }],
   });
   if (factError) throw factError;
 }
