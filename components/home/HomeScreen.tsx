@@ -6,6 +6,7 @@ import { daysOver, formatDateTitle, formatRunTime } from "@/lib/compute";
 import type { FactSource, PassItem, RunSource } from "@/lib/types";
 import ProvenanceSheet from "@/components/ProvenanceSheet";
 import PassFlow from "./PassFlow";
+import NeedsYou from "./NeedsYou";
 
 type Mode = "home" | "pass";
 
@@ -172,6 +173,9 @@ function HomeSurface({
           </div>
         </div>
       )}
+
+      {/* 4b · NEEDS YOU — the card list the pass walks through (canvas 1a) */}
+      <NeedsYou onShowSources={onShowSources} />
 
       {/* 5 · MEANWHILE */}
       {meanwhile.length > 0 && (

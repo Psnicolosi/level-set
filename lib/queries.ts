@@ -6,6 +6,7 @@ import type {
   ConflictGroup,
   Fact,
   OwedItem,
+  Party,
   PassItem,
   Run,
   Topic,
@@ -24,17 +25,20 @@ export interface MeanwhileRow {
 export interface HomeData {
   threshold: number; // t, business days (setting, default 5)
   run: Run | null;
-  passItems: PassItem[]; // conflicts pinned above all, then strictly oldest basis_date first
+  passItems: PassItem[]; // Paul's queue: conflicts pinned, then strictly oldest basis_date first
   agingCount: number;
   yoursByFriCount: number;
   conflictCount: number;
   meanwhile: MeanwhileRow[];
+  partiesById: Map<string, Party>;
+  conflictFactsByGroup: Map<string, Fact[]>; // unresolved groups → their competing facts
+  blockedItems: OwedItem[]; // downstream items held by unresolved conflicts
 }
 
 const HOME_KEY = ["home"];
 
 async function fetchHome(): Promise<HomeData> {
-  const [settingsQ, runQ, needsQ, itemsQ, topicsQ, conflictsQ, meanwhileQ] =
+  const [settingsQ, runQ, needsQ, itemsQ, topicsQ, conflictsQ, meanwhileQ, partiesQ] =
     await Promise.all([
       supabase.from("settings").select("key, value"),
       supabase
@@ -53,9 +57,10 @@ async function fetchHome(): Promise<HomeData> {
         .select("*")
         .order("muted", { ascending: true })
         .order("occurred_at", { ascending: false }),
+      supabase.from("parties").select("*"),
     ]);
 
-  for (const q of [settingsQ, runQ, needsQ, itemsQ, topicsQ, conflictsQ, meanwhileQ]) {
+  for (const q of [settingsQ, runQ, needsQ, itemsQ, topicsQ, conflictsQ, meanwhileQ, partiesQ]) {
     if (q.error) throw q.error;
   }
 
@@ -64,25 +69,31 @@ async function fetchHome(): Promise<HomeData> {
       ?.value ?? 5,
   );
   const run = (runQ.data?.[0] as Run | undefined) ?? null;
-  const needs = (needsQ.data ?? []) as OwedItem[];
+  const needs = ((needsQ.data ?? []) as OwedItem[]).filter((i) => i.owner === "paul");
   const allItems = (itemsQ.data ?? []) as OwedItem[];
   const topics = new Map((topicsQ.data ?? []).map((t) => [t.id, t as Topic]));
   const openConflicts = (conflictsQ.data ?? []) as ConflictGroup[];
-  const conflictTopicIds = new Set(openConflicts.map((c) => c.topic_id));
+  const partiesById = new Map(((partiesQ.data ?? []) as Party[]).map((p) => [p.id, p]));
 
-  // Secondary fetches: source facts + drafts for the pass items.
+  // Secondary fetches: source facts + drafts for the pass items, and the
+  // competing facts inside each unresolved conflict group.
   const factIds = needs.map((i) => i.source_fact_id).filter(Boolean) as string[];
   const itemIds = needs.map((i) => i.id);
-  const [factsQ, draftsQ] = await Promise.all([
+  const groupIds = openConflicts.map((c) => c.id);
+  const [factsQ, draftsQ, conflictFactsQ] = await Promise.all([
     factIds.length
       ? supabase.from("facts").select("*").in("id", factIds)
       : Promise.resolve({ data: [], error: null }),
     itemIds.length
       ? supabase.from("drafts").select("owed_item_id, body").in("owed_item_id", itemIds)
       : Promise.resolve({ data: [], error: null }),
+    groupIds.length
+      ? supabase.from("facts").select("*").in("conflict_group", groupIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (factsQ.error) throw factsQ.error;
   if (draftsQ.error) throw draftsQ.error;
+  if (conflictFactsQ.error) throw conflictFactsQ.error;
 
   const factById = new Map(((factsQ.data ?? []) as Fact[]).map((f) => [f.id, f]));
   const draftByItem = new Map(
@@ -91,6 +102,13 @@ async function fetchHome(): Promise<HomeData> {
       d.body,
     ]),
   );
+  const conflictFactsByGroup = new Map<string, Fact[]>();
+  for (const f of (conflictFactsQ.data ?? []) as Fact[]) {
+    if (!f.conflict_group) continue;
+    const list = conflictFactsByGroup.get(f.conflict_group) ?? [];
+    list.push(f);
+    conflictFactsByGroup.set(f.conflict_group, list);
+  }
 
   const unresolvedGroupIds = new Set(openConflicts.map((c) => c.id));
 
@@ -122,7 +140,7 @@ async function fetchHome(): Promise<HomeData> {
   const agingCount = allItems.filter(
     (i) =>
       i.state === "open" &&
-      (i.needs === "none" ? true : needsIds.has(i.id)) && // non-needs items are fine; needs-items must have passed the view filter
+      (i.needs === "none" ? true : needsIds.has(i.id)) &&
       businessDaysSince(i.basis_date) > threshold,
   ).length;
 
@@ -132,6 +150,8 @@ async function fetchHome(): Promise<HomeData> {
       i.direction === "self" &&
       (i.due_bucket === "today" || i.due_bucket === "few_days" || i.due_bucket === "this_week"),
   ).length;
+
+  const blockedItems = allItems.filter((i) => i.state === "blocked");
 
   const meanwhileFacts = (meanwhileQ.data ?? []) as MeanwhileRow[];
   const mwFactIds = meanwhileFacts.map((m) => m.source_fact_id).filter(Boolean) as string[];
@@ -154,6 +174,9 @@ async function fetchHome(): Promise<HomeData> {
     yoursByFriCount,
     conflictCount: openConflicts.length,
     meanwhile,
+    partiesById,
+    conflictFactsByGroup,
+    blockedItems,
   };
 }
 
@@ -163,12 +186,23 @@ export function useHomeData() {
 
 // ── Triage marks — logged to the topic's event stream the moment taken ──
 
-type Mark = "done" | "later";
+export type Mark = "done" | "later" | "snooze" | "katie";
+
+const MARK_BODY: Record<Mark, (d: string) => string> = {
+  done: (d) => `Marked done — ${d}`,
+  later: (d) => `Deferred (Later) from the morning pass — ${d}`,
+  snooze: (d) => `Snoozed from Needs-You — ${d}`,
+  katie: (d) => `Delegated to Katie — ${d}`,
+};
 
 async function markItem(item: PassItem, mark: Mark) {
   const now = new Date().toISOString();
   const update =
-    mark === "done" ? { state: "done" as const } : { deferred_at: now };
+    mark === "done"
+      ? { state: "done" as const }
+      : mark === "katie"
+        ? { owner: "katie" }
+        : { deferred_at: now };
 
   const { error: updateError } = await supabase
     .from("owed_items")
@@ -180,13 +214,10 @@ async function markItem(item: PassItem, mark: Mark) {
   const { error: factError } = await supabase.from("facts").insert({
     topic_id: item.topic_id,
     occurred_at: now,
-    body:
-      mark === "done"
-        ? `Marked done from the morning pass — ${item.description}`
-        : `Deferred (Later) from the morning pass — ${item.description}`,
+    body: MARK_BODY[mark](item.description),
     kind: "action",
     verification: "verified",
-    sources: [{ type: "manual", sender: "Paul Nicolosi", timestamp: now, subject: "Pass action" }],
+    sources: [{ type: "manual", sender: "Paul Nicolosi", timestamp: now, subject: "Triage mark" }],
   });
   if (factError) throw factError;
 }
@@ -195,7 +226,7 @@ export function useMarkItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ item, mark }: { item: PassItem; mark: Mark }) => markItem(item, mark),
-    // Optimistic: the pass advances immediately; server confirms behind it.
+    // Optimistic: the surface advances immediately; server confirms behind it.
     onMutate: async ({ item, mark }) => {
       await qc.cancelQueries({ queryKey: HOME_KEY });
       const prev = qc.getQueryData<HomeData>(HOME_KEY);
@@ -203,7 +234,7 @@ export function useMarkItem() {
         qc.setQueryData<HomeData>(HOME_KEY, {
           ...prev,
           passItems:
-            mark === "done"
+            mark === "done" || mark === "katie"
               ? prev.passItems.filter((p) => p.id !== item.id)
               : prev.passItems.map((p) =>
                   p.id === item.id ? { ...p, deferred_at: new Date().toISOString() } : p,
