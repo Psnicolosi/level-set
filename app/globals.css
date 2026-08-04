@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/* ── Level Set design tokens — SPEC-tokens.md. No default Tailwind palette. ── */
+:root {
+  --paper: #f6f4ee;
+  --paper-raised: #fbfaf6;
+  --ink: #191712;
+  --ink-body: #40403a;
+  --ink-secondary: #6e685c;
+  --ink-muted: #8f8a7d;
+  --ink-faint: #b5b0a4;
+  --line: #e3dfd4;
+  --line-strong: #c6c1b4;
+  --amber: #c9a44a;
+  --amber-text: #8a6614;
+  --red: #c4543c;
+  --red-text: #a03a26;
+  --green: #7a9474;
+  --green-text: #3e6a3a;
+  --green-fill: #f3f6f1;
+  --unverified: #c08a2d;
+  --link: #3d5875;
+  --link-hover: #22364d;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-body: var(--ink-body);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-amber: var(--amber);
+  --color-amber-text: var(--amber-text);
+  --color-red: var(--red);
+  --color-red-text: var(--red-text);
+  --color-green: var(--green);
+  --color-green-text: var(--green-text);
+  --color-green-fill: var(--green-fill);
+  --color-unverified: var(--unverified);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+
+  --font-serif: "Source Serif 4", Georgia, serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Geometry: square corners everywhere. */
+  --radius-*: initial;
+}
+
+/* Hard rule: border-radius 0 everywhere. No exceptions. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
