@@ -254,7 +254,9 @@ function shortLabel(i: PassItem): string {
   if (i.source_fact?.sources?.[0]) {
     const s = i.source_fact.sources[0];
     if (s.type === "email" && s.sender && !s.sender.includes("Paul Nicolosi")) {
-      return (s.sender.replace(/<.*>/, "").trim().split(" ").pop() ?? "").replace(/,$/, "");
+      // Surname including particles: "Al del Castillo" → "del Castillo".
+      const parts = s.sender.replace(/<.*>/, "").trim().replace(/,$/, "").split(/\s+/);
+      return parts.length > 1 ? parts.slice(1).join(" ") : parts[0];
     }
   }
   const words = i.description.replace(/[—–].*$/, "").trim().split(/\s+/);
